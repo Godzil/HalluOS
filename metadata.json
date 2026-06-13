@@ -1,0 +1,6 @@
+{
+  "name": "HalluOS",
+  "description": "An interactive hallucinated operating system powered entirely by real-time LLM-generated GUIs and simulated digital subconscious.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
