@@ -25,6 +25,23 @@ import {
 } from 'lucide-react';
 import { Widget, Theme, Layout } from '../types';
 
+// Play micro beeps using Web Audio API
+const playBeep = (freq = 800, duration = 0.05, type: 'sine' | 'square' | 'sawtooth' | 'triangle' = 'sine') => {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    gain.gain.setValueAtTime(0.04, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + duration);
+  } catch (_) {}
+};
+
 interface WidgetRendererProps {
   layout: Layout;
   theme: Theme;
@@ -362,6 +379,205 @@ export default function WidgetRenderer({ layout, theme, onActionTriggered, isLoa
             )}
           </div>
         );
+
+      case 'pixelGrid': {
+        const size = w.gridSize || 12;
+        const total = size * size;
+        
+        let colors: string[] = [];
+        if (w.pixelColors && w.pixelColors.length > 0) {
+          colors = w.pixelColors;
+        } else if (w.options && w.options.length > 0) {
+          colors = w.options;
+        } else if (w.value) {
+          colors = w.value.split(',').map(s => s.trim());
+        }
+
+        return (
+          <div key={w.id} id={w.id} className="flex flex-col gap-2 w-full select-none">
+            {w.label && (
+              <span className="text-xs font-semibold uppercase tracking-wider text-indigo-300 font-mono">
+                {w.label}
+              </span>
+            )}
+            <div 
+              className="grid border border-white/10 p-2 rounded-xl bg-black/45 gap-1 w-full max-w-full overflow-auto aspect-square text-indigo-400"
+              style={{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))` }}
+            >
+              {Array.from({ length: total }).map((_, idx) => {
+                const x = idx % size;
+                const y = Math.floor(idx / size);
+                const rawColor = colors[idx] || '';
+                
+                let style: React.CSSProperties = {};
+                let className = "aspect-square rounded-sm border border-white/5 cursor-pointer hover:opacity-85 transition duration-100 flex items-center justify-center text-[8px]";
+                
+                if (rawColor.startsWith('#') || rawColor.startsWith('rgb') || rawColor.startsWith('hsl')) {
+                  style = { backgroundColor: rawColor };
+                } else if (rawColor.startsWith('bg-')) {
+                  className += ` ${rawColor}`;
+                } else {
+                  className += " bg-zinc-900";
+                }
+
+                return (
+                  <button
+                    key={idx}
+                    disabled={isLoading}
+                    style={style}
+                    className={className}
+                    title={`Pixel X:${x} Y:${y}`}
+                    onClick={() => {
+                      onActionTriggered(w.id, 'click', { value: `${x},${y}` });
+                    }}
+                  />
+                );
+              })}
+            </div>
+            <div className="flex justify-between items-center text-[9px] opacity-50 font-mono">
+              <span>MATRIX RESOLUTION: {size}x{size}</span>
+              <span>CLICK TO DRAW / INPUT SIGNAL</span>
+            </div>
+          </div>
+        );
+      }
+
+      case 'slider': {
+        const minVal = w.min !== undefined ? w.min : 0;
+        const maxVal = w.max !== undefined ? w.max : 100;
+        const stepVal = w.step !== undefined ? w.step : 1;
+        const currentVal = formValues[w.id] !== undefined 
+          ? Number(formValues[w.id]) 
+          : (w.value !== undefined ? Number(w.value) : minVal);
+
+        return (
+          <div key={w.id} className="flex flex-col gap-1.5 w-full font-mono">
+            <div className="flex justify-between items-center text-xs">
+              {w.label && <span className="font-semibold text-slate-300">{w.label}</span>}
+              <span className="text-pink-400 font-bold bg-white/5 py-0.5 px-2 rounded-md border border-white/10">
+                {currentVal}
+              </span>
+            </div>
+            <input
+              id={w.id}
+              type="range"
+              min={minVal}
+              max={maxVal}
+              step={stepVal}
+              value={currentVal}
+              disabled={isLoading}
+              onChange={(e) => {
+                handleInputChange(w.id, e.target.value);
+              }}
+              onMouseUp={(e) => {
+                onActionTriggered(w.id, 'change', { value: (e.target as HTMLInputElement).value });
+              }}
+              onTouchEnd={(e) => {
+                onActionTriggered(w.id, 'change', { value: (e.target as HTMLInputElement).value });
+              }}
+              className="w-full h-1.5 rounded-lg bg-white/10 appearance-none cursor-pointer accent-pink-500"
+            />
+          </div>
+        );
+      }
+
+      case 'pianoKeys': {
+        const defaultNotes = ["C4", "C#4", "D4", "D#4", "E4", "F4", "F#4", "G4", "G#4", "A4", "A#4", "B4", "C5"];
+        const keys = w.pianoNotes || w.options || defaultNotes;
+        
+        const noteFreqs: Record<string, number> = {
+          "C4": 261.63, "C#4": 277.18, "D4": 293.66, "D#4": 311.13, "E4": 329.63, "F4": 349.23,
+          "F#4": 369.99, "G4": 392.00, "G#4": 415.30, "A4": 440.00, "A#4": 466.16, "B4": 493.88,
+          "C5": 523.25, "C#5": 554.37, "D5": 587.33, "D#5": 622.25, "E5": 659.25, "F5": 698.46
+        };
+
+        const handlePlayNote = (note: string) => {
+          const freq = noteFreqs[note] || 440.0;
+          playBeep(freq, 0.25, 'sine');
+          onActionTriggered(w.id, 'click', { value: note });
+        };
+
+        return (
+          <div key={w.id} id={w.id} className="flex flex-col gap-2 w-full font-mono select-none">
+            {w.label && (
+              <span className="text-xs font-semibold uppercase tracking-wider text-cyan-300">
+                {w.label}
+              </span>
+            )}
+            <div className="flex border border-white/10 p-1.5 rounded-xl bg-black/60 overflow-x-auto gap-0.5 min-h-[90px] h-24">
+              {keys.map((note) => {
+                const isSharp = note.includes('#') || note.includes('b');
+                const isSelected = w.value === note;
+
+                return (
+                  <button
+                    key={note}
+                    disabled={isLoading}
+                    onClick={() => handlePlayNote(note)}
+                    className={`flex-1 min-w-[32px] md:min-w-[40px] rounded-b-lg border flex flex-col justify-end pb-2 text-[9px] font-bold uppercase transition duration-150 active:scale-95 cursor-pointer ${
+                      isSharp 
+                        ? isSelected 
+                          ? 'bg-rose-500 text-white border-rose-600'
+                          : 'bg-[#1b1c22] hover:bg-neutral-800 text-slate-300 border-black shadow-[inset_0_-4px_0_#111]'
+                        : isSelected
+                          ? 'bg-cyan-500 text-slate-950 border-cyan-600'
+                          : 'bg-white hover:bg-slate-100 text-neutral-900 border-slate-300 shadow-[inset_0_-6px_0_#ddd]'
+                    }`}
+                  >
+                    <span className="text-center w-full block truncate">{note}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      }
+
+      case 'colorPalette': {
+        const defaultPalette = ["#ff4a4a", "#ff9d1c", "#ffeb3b", "#4caf50", "#00bcd4", "#2196f3", "#9c27b0", "#e91e63", "#ffffff", "#121214"];
+        const colors = w.paletteColors || w.options || defaultPalette;
+        const selectedColor = formValues[w.id] !== undefined
+          ? formValues[w.id]
+          : (w.value || colors[0]);
+
+        return (
+          <div key={w.id} id={w.id} className="flex flex-col gap-2 w-full font-mono select-none">
+            {w.label && (
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+                {w.label}
+              </span>
+            )}
+            <div className="flex flex-wrap gap-2.5 border border-white/10 p-3 rounded-xl bg-black/35">
+              {colors.map((color) => {
+                const isSelected = selectedColor.toLowerCase() === color.toLowerCase();
+                return (
+                  <button
+                    key={color}
+                    disabled={isLoading}
+                    title={color}
+                    onClick={() => {
+                      handleInputChange(w.id, color);
+                      onActionTriggered(w.id, 'change', { value: color });
+                    }}
+                    style={{ backgroundColor: color }}
+                    className={`w-7 h-7 rounded-lg border cursor-pointer relative transition duration-150 active:scale-90 hover:opacity-90 ${
+                      isSelected 
+                        ? 'border-white scale-110 shadow-lg shadow-white/15' 
+                        : 'border-white/10'
+                    }`}
+                  >
+                    {isSelected && (
+                      <span className="absolute inset-0 flex items-center justify-center text-xs text-white font-bold">
+                        ✓
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      }
 
       default:
         return null;

@@ -34,15 +34,33 @@ export const PREMADE_APPS: PremadeApp[] = [
   {
     appKey: "paint",
     name: "DreamPaint Grid",
-    description: "Draw pixel canvas coordinates or ask the LLM to hallucinate beautiful geometric, abstract or ASCII drawings.",
+    description: "An interactive pixel art drawing canvas. Set custom canvas resolution, pick brush shades, and plot frames.",
     iconName: "PenTool",
-    rating: 4.7,
+    rating: 4.9,
     category: "Synthetic Art",
-    startingPrompt: `You are DreamPaint Grid.
-- Provide a visual 8x8 or 10x10 representation of a drawing canvas. You can represent this canvas as a beautifully styled table of colored grid cells, or a large formatted ASCII art block!
-- Provide interactive controls like text inputs for prompts ("What to draw", "Brush style") and buttons like "Draw Cosmos", "Render Pixel Skull", "Add Glitch Noise", "Invert Colors".
-- Keep track of the canvas's pixel values or ASCII strings in 'appState' so it remains drawing between turns.
-- Write funny artistic critique of whatever is currently on the canvas on each turn.`
+    startingPrompt: `You are DreamPaint Grid, the primary hallucinated creative suite.
+- You MUST render the drawing canvas using our dedicated 'pixelGrid' component!
+- Specify its 'gridSize' attribute (e.g., 12) and serialize its current pixel colors (as standard hex or Tailwind bg-color names) into the 'pixelColors' array.
+- Use the 'colorPalette' component of circles to let the user select a brush color (e.g. #ff4a4a, #00bcd4, #4caf50, #ffeb3b, #ffffff, #121214) with a label like "Selected Brush Tint".
+- Provide interactive buttons like "Invert Canvas", "Reset Drawing Grid", "Add Glitch Pattern", "Generate Cosmos Mandala".
+- Provide a 'slider' widget to let the user change parameter values like "Contrast Intensity" or "Hallucination Distort".
+- When you receive a coordinate action of the form "x,y" (meaning user clicked/drawn on coordinate x,y in the pixelGrid), you MUST translate it: calculate the index (idx = y * gridSize + x), update the pixelColor array value at that index with the selected brush color preserved in 'appState', save the updated list to 'appState' serialized string, and return the modified layout colors!
+- Include a funny critique or retro aesthetic review of whatever is currently plotted on the grid.`
+  },
+  {
+    appKey: "synth",
+    name: "Polyphonic Neural Synth",
+    description: "An interactive digital audio synthesizer. Adjust ADSR envelopes with sliders and key-tap the piano roll.",
+    iconName: "Music",
+    rating: 4.8,
+    category: "Synthetic Audio",
+    startingPrompt: `You are Polyphonic Neural Synth.
+- Provide a virtual audio soundboard and synthesizer.
+- You MUST render the interactive keyboard using the 'pianoKeys' widget! Configure its 'pianoNotes' array with pitch nodes (e.g., ["C4", "C#4", "D4", "D#4", "E4", "F4", "F#4", "G4", "A4", "B4", "C5"]). Let 'value' on pianoKeys represent the last played note!
+- Add 'slider' components to control ADSR envelope parameters, labeled with names like "Attack Speed", "Decay Rate", "Sustain Level", "Release Echo", or "Hallucinatory Vibrato".
+- Include a 'colorPalette' circular widget to let users select the "Sound Wave Tint" (representing sine, square, sawtooth, triangle waves conceptually via color names).
+- Render a live 'chart' component depicting waves or frequency spectral analysis metrics based on the active keys and volume envelopes.
+- Under appState, keep track of played keys history, frequency log, wave shape styles, ADSR envelope numbers, and log an elegant sci-fi musical score summary on each turn.`
   },
   {
     appKey: "dreams",

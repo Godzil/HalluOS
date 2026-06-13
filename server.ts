@@ -69,15 +69,18 @@ const guiSchema = {
             type: Type.OBJECT,
             properties: {
               id: { type: Type.STRING, description: "Unique element ID, e.g. btn_run, txt_prompt, select_cat" },
-              type: { type: Type.STRING, description: "text | heading | button | input | textarea | select | radioGroup | checkbox | chart | table | status_alert" },
-              value: { type: Type.STRING, description: "The content text, default value, or formatted output" },
-              label: { type: Type.STRING, description: "Input label or button text" },
+              type: { 
+                type: Type.STRING, 
+                description: "text | heading | button | input | textarea | select | radioGroup | checkbox | chart | table | status_alert | pixelGrid | slider | pianoKeys | colorPalette" 
+              },
+              value: { type: Type.STRING, description: "The content text, default value, or formatted output. For pixelGrid this can be a comma-separated list of colors. For slider/pianoKeys/colorPalette this represents current selection value." },
+              label: { type: Type.STRING, description: "Input label, button label, or header caption text" },
               placeholder: { type: Type.STRING },
               variant: { type: Type.STRING, description: "For button: 'primary' | 'secondary' | 'danger' | 'success'. For status_alert: 'info' | 'warning' | 'success' | 'alarm'." },
               options: {
                 type: Type.ARRAY,
                 items: { type: Type.STRING },
-                description: "Array of choice strings for select or radioGroup"
+                description: "Array of choice strings for select or radioGroup, or pixel colors fallback"
               },
               chartType: { type: Type.STRING, description: "line | bar | pie" },
               chartData: {
@@ -101,6 +104,25 @@ const guiSchema = {
                   type: Type.ARRAY,
                   items: { type: Type.STRING }
                 }
+              },
+              min: { type: Type.NUMBER, description: "Optional min value for range slider" },
+              max: { type: Type.NUMBER, description: "Optional max value for range slider" },
+              step: { type: Type.NUMBER, description: "Optional step increment for range slider" },
+              gridSize: { type: Type.INTEGER, description: "Dimension size e.g. 8 | 12 | 16 columns/rows for the pixelGrid drawing matrix" },
+              pixelColors: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: "Vibrant colors for the pixelGrid matching calculated layout width*height index keys"
+              },
+              paletteColors: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: "Array of custom hex color chips for colorPalette"
+              },
+              pianoNotes: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: "Custom key notes array e.g. ['C4', 'D4', 'E4'] for the virtual audio synthesizer pianoKeys"
               }
             },
             required: ["id", "type"]
@@ -169,12 +191,16 @@ The user is launching or interacting with an app named "${appName}".
 Your goal is to render a highly interactive, functional, and deeply styled user interface (GUI) inside the window layout.
 
 CRITICAL INSTRUCTIONS FOR SYSTEM RETURNING GRAPHICAL GUI:
-1. Every interactive element (buttons, inputs, selects, radio groups, checkboxes) MUST have a UNIQUE stable 'id'.
-2. When the user interacts (like clicking a button or typing in input), they send an 'action'. Your output JSON MUST react logically to that action, updating values, introducing new outputs, expanding charts, or modifying the custom 'appState'.
-3. Always supply rich content! If it's a file explorer, show real hallucinated directories and files. If it's a painting app, represent the canvas as styled grids or text rendering blocks. If it's a game, maintain score and status in 'appState'.
+1. Every interactive element (buttons, inputs, selects, radio groups, checkboxes, pixelGrid, slider, pianoKeys, colorPalette) MUST have a UNIQUE stable 'id'.
+2. When the user interacts (like clicking a button, dragging a slider, choosing a color, tapping a piano key, or drawing on the pixelGrid), they send an 'action'. Your output JSON MUST react logically to that action, updating corresponding elements, introducing new lines, updating the selected values, or modifying the custom 'appState'.
+3. Always supply rich content! If it's a file explorer, show real hallucinated directories and files. If it's a painting app, represent the canvas using the 'pixelGrid' component. If it's a synthesized keyboard, use 'pianoKeys' and 'colorPalette' for brush selections!
 4. Do NOT use fake strings like "loading..." or "lorem ipsum". Hallucinate fully fleshed out, hilarious, space-age, retro-cyberpunk, or mystical content!
-5. Utilize 'status_alert' grids, 'table' views and 'chart' fields to make data-intensive mock apps readable and visually impressive.
-6. The 'appState' property is a JSON string where you can save critical states e.g. list of files, user highscore, current text, shopping cart items, etc. Remember this string and parse it/update it on every turn to maintain true persistent continuity!
+5. Utilize 'status_alert' grids, 'table' views, 'chart' fields, and the brand new full GUI toolkit items:
+   - 'pixelGrid': Highly interactive digital canvas! Specify 'gridSize' (e.g., 8, 12, or 16) and 'pixelColors' as an array of colors (matching total gridSize*gridSize elements). When the user clicks a coordinate, they trigger click-actions with value containing 'x,y'. Update the corresponding entry in 'appState' and output the new list of colors in 'pixelColors' or 'value' so that their drawing is rendered perfectly!
+   - 'slider': High-precision parameter control! Specify 'min' (e.g. 0), 'max' (e.g. 100), 'step' (e.g. 1), and 'value' corresponding to numerical state.
+   - 'pianoKeys': A functional virtual synthesizer keyboard! Clicking notes plays a dynamic synthesizer sound beep with correct frequency pitch! Specify 'pianoNotes' (e.g., ['C4', 'C#4', 'D4', 'D#4', 'E4', 'F4', 'F#4', 'G4', 'G#4', 'A4', 'A#4', 'B4', 'C5']).
+   - 'colorPalette': Circles of color chips! Used for brushes, styling pages, or theme presets. Let selection fire a change action with chosen hex color value.
+6. The 'appState' property is a JSON string where you can save critical states e.g. list of files, user coordinates drawn, canvas arrays, user highscore, current active keys, synthesizer resonance values, etc. Remember this string and parse it/update it on every turn to maintain true persistent continuity!
 7. Keep custom themes distinct but matching your apps. High-contrast terminal look for hack terminals, magenta/indigo neon for synth engines, warm amber for writing/notebook logs.
 
 CURRENT COGNITIVE TUNING LEVEL RULE (Adhere strictly to this density):

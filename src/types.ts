@@ -16,7 +16,11 @@ export type WidgetType =
   | 'checkbox'
   | 'chart'
   | 'table'
-  | 'status_alert';
+  | 'status_alert'
+  | 'pixelGrid'
+  | 'slider'
+  | 'pianoKeys'
+  | 'colorPalette';
 
 export interface ChartDataItem {
   name: string;
@@ -35,6 +39,13 @@ export interface Widget {
   chartData?: ChartDataItem[];
   tableHeaders?: string[];
   tableRows?: string[][];
+  min?: number;
+  max?: number;
+  step?: number;
+  gridSize?: number;
+  pixelColors?: string[];
+  paletteColors?: string[];
+  pianoNotes?: string[];
 }
 
 export interface Layout {
