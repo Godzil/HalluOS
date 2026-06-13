@@ -89,6 +89,20 @@ export interface AppInstance {
   height: number;
 }
 
+export interface SavedSession {
+  id: string;
+  name: string;
+  createdAt: string;
+  temperature: number;
+  hallucinationLevel: number;
+  wallpaperId: string;
+  kernelMode: 'Chaos' | 'Lucid' | 'Cryptic';
+  installedApps: PremadeApp[];
+  windows: AppInstance[];
+  customTheme: any;
+  generalLogs: string[];
+}
+
 export interface PremadeApp {
   appKey: string;
   name: string;

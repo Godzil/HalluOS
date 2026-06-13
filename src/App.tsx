@@ -84,6 +84,11 @@ export default function App() {
   const [debugLogs, setDebugLogs] = useState<any[]>([]);
   const [showDebugWindow, setShowDebugWindow] = useState<boolean>(false);
 
+  // Persistent Multiple OS sessions storage state
+  const [savedSessions, setSavedSessions] = useState<any[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [saveSessionName, setSaveSessionName] = useState<string>('');
+
   const [wallpaper, setWallpaper] = useState(WALLPAPER_PRESETS[0]);
   const [time, setTime] = useState(new Date());
   const [quantumShift, setQuantumShift] = useState(0.0);
@@ -113,6 +118,184 @@ export default function App() {
     "Connecting synaptic mesh with Gemini flash cores.",
     "Desktop environment fully projected in browser iFrame.",
   ]);
+
+  // Load saved sessions from localStorage on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('halluos_saved_sessions');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setSavedSessions(parsed);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to read saved sessions", e);
+    }
+  }, []);
+
+  // Save specific sessions array to storage
+  const saveSavedSessionsToStorage = (updatedList: any[]) => {
+    try {
+      localStorage.setItem('halluos_saved_sessions', JSON.stringify(updatedList));
+      setSavedSessions(updatedList);
+    } catch (e) {
+      console.error("Failed to write saved sessions", e);
+    }
+  };
+
+  // Perform delete of an existing session
+  const handleDeleteSession = (id: string) => {
+    const nextList = savedSessions.filter(s => s.id !== id);
+    saveSavedSessionsToStorage(nextList);
+    if (activeSessionId === id) {
+      setActiveSessionId(null);
+    }
+  };
+
+  // Resume/Boot an existing session from BIOS Screen
+  const handleResumeSession = (session: any, quickBoot: boolean) => {
+    setTemperature(session.temperature);
+    setHallucinationLevel(session.hallucinationLevel);
+    
+    const matchedWall = WALLPAPER_PRESETS.find(w => w.id === session.wallpaperId) || WALLPAPER_PRESETS[0];
+    setWallpaper(matchedWall);
+    setKernelMode(session.kernelMode || 'Lucid');
+    setInstalledApps(session.installedApps || PREMADE_APPS);
+    setWindows(session.windows || []);
+    setCustomTheme(session.customTheme || null);
+    setGeneralLogs(session.generalLogs || []);
+    setActiveSessionId(session.id);
+    
+    setShowBios(false);
+    if (quickBoot) {
+      setShowBootSequence(false);
+      logToSystem(`Restored core snapshot "${session.name}" instantaneously without decoherence loader.`);
+    } else {
+      setShowBootSequence(true);
+      logToSystem(`Restored core snapshot "${session.name}". Warming up neural oscillators.`);
+    }
+  };
+
+  // Create & Boot a Brand New Session
+  const handleBootNewSession = (sessionName: string, tempVal: number, levelVal: number) => {
+    const sId = `os_${Date.now()}`;
+    const cleanName = sessionName.trim() || `Neural Core #${savedSessions.length + 1}`;
+    
+    const defaultLogs = [
+      `Initializing environment for "${cleanName}"...`,
+      `Establishing synaptic matrix with temperature calibration: ${tempVal.toFixed(2)}`,
+      `Quantum distortion level accepted: ${levelVal}/5`
+    ];
+
+    const newSessionState = {
+      id: sId,
+      name: cleanName,
+      createdAt: new Date().toLocaleString(),
+      temperature: tempVal,
+      hallucinationLevel: levelVal,
+      wallpaperId: WALLPAPER_PRESETS[0].id,
+      kernelMode: 'Lucid' as 'Chaos' | 'Lucid' | 'Cryptic',
+      installedApps: [
+        ...PREMADE_APPS,
+        {
+          appKey: "themeweaver",
+          name: "Subconscious Theme Weaver",
+          description: "Harness LLM parameters to rewrite color palettes, wallpapers, and fonts on the fly.",
+          iconName: "Feather",
+          rating: 4.9,
+          category: "System Core",
+          startingPrompt: "Subconscious Theme Weaver launcher"
+        }
+      ],
+      windows: [],
+      customTheme: null,
+      generalLogs: defaultLogs
+    };
+
+    const nextList = [...savedSessions, newSessionState];
+    saveSavedSessionsToStorage(nextList);
+    
+    setTemperature(tempVal);
+    setHallucinationLevel(levelVal);
+    setWallpaper(WALLPAPER_PRESETS[0]);
+    setKernelMode('Lucid');
+    setInstalledApps(newSessionState.installedApps);
+    setWindows([]);
+    setCustomTheme(null);
+    setGeneralLogs(defaultLogs);
+    setActiveSessionId(sId);
+    
+    setShowBios(false);
+    setShowBootSequence(true);
+  };
+
+  // Perform a manual save/snapshot of the current OS state
+  const handleSaveCurrentSnapshot = () => {
+    const targetId = activeSessionId || `os_${Date.now()}`;
+    const defaultName = `Subconscious Live #${savedSessions.filter(s => s.id.startsWith('os_')).length + 1}`;
+    const chosenName = saveSessionName.trim() || defaultName;
+
+    const sessionState = {
+      id: targetId,
+      name: chosenName,
+      createdAt: new Date().toLocaleString(),
+      temperature,
+      hallucinationLevel,
+      wallpaperId: wallpaper.id,
+      kernelMode,
+      installedApps,
+      windows,
+      customTheme,
+      generalLogs
+    };
+
+    let nextSessions = [...savedSessions];
+    const matchIdx = nextSessions.findIndex(s => s.id === targetId);
+    if (matchIdx >= 0) {
+      nextSessions[matchIdx] = sessionState;
+      logToSystem(`Saved persistent snapshot updates for: "${chosenName}".`);
+    } else {
+      nextSessions.push(sessionState);
+      logToSystem(`Created brand new persistent snapshot profile: "${chosenName}". font-mono`);
+    }
+
+    saveSavedSessionsToStorage(nextSessions);
+    setActiveSessionId(targetId);
+    setSaveSessionName('');
+  };
+
+  // Real-time automatic background state projection / auto-saver
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const autoSaveTimer = setTimeout(() => {
+      setSavedSessions(prev => {
+        const idx = prev.findIndex(s => s.id === activeSessionId);
+        if (idx === -1) return prev;
+        
+        const updated = [...prev];
+        updated[idx] = {
+          ...updated[idx],
+          temperature,
+          hallucinationLevel,
+          wallpaperId: wallpaper.id,
+          kernelMode,
+          installedApps,
+          windows,
+          customTheme,
+          generalLogs
+        };
+        try {
+          localStorage.setItem('halluos_saved_sessions', JSON.stringify(updated));
+        } catch (e) {
+          console.error("Auto-save storage failed", e);
+        }
+        return updated;
+      });
+    }, 2000);
+
+    return () => clearTimeout(autoSaveTimer);
+  }, [activeSessionId, temperature, hallucinationLevel, wallpaper, kernelMode, installedApps, windows, customTheme, generalLogs]);
 
   // Sync real clock and quantum fluctuation intervals
   useEffect(() => {
@@ -444,11 +627,10 @@ export default function App() {
         setTemperature={setTemperature}
         hallucinationLevel={hallucinationLevel}
         setHallucinationLevel={setHallucinationLevel}
-        onCompleteBoot={() => {
-          setShowBios(false);
-          setShowBootSequence(true);
-          logToSystem(`Synthesized operating parameters accepted. Initializing LLM boot sequencer.`);
-        }}
+        savedSessions={savedSessions}
+        onDeleteSession={handleDeleteSession}
+        onResumeSession={handleResumeSession}
+        onBootNewSession={handleBootNewSession}
       />
     );
   }
@@ -707,6 +889,58 @@ export default function App() {
           {/* Diagnostic Tooltip panel */}
           <div className="bg-black/40 border border-white/5 rounded-lg p-2.5 mt-2 text-[10px] text-indigo-200 font-mono leading-normal min-h-[48px] select-none">
             {getLevelInstructions(hallucinationLevel)}
+          </div>
+        </div>
+
+        {/* Persistent Session Snapshot Sector */}
+        <div className="border-t border-white/10 pt-3 mt-3.5 select-none font-mono">
+          <div className="flex justify-between items-center text-[10px] text-pink-300 font-bold tracking-widest uppercase mb-2">
+            <span>💾 Session Snapshots</span>
+            {activeSessionId && (
+              <span className="text-[8px] bg-emerald-500/10 text-emerald-400 px-1 py-0.5 rounded border border-emerald-500/15 animate-pulse flex items-center gap-1">
+                <span className="w-1 h-1 rounded-full bg-emerald-400" />
+                Live Sync Active
+              </span>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            {activeSessionId && (
+              <div className="bg-indigo-950/20 border border-indigo-500/20 rounded p-1.5 text-[9px] text-slate-300 flex flex-col gap-0.5">
+                <span className="text-[8px] uppercase tracking-wider text-white/50 font-semibold">Current Active OS Instance</span>
+                <span className="text-indigo-200 font-bold truncate">
+                  {savedSessions.find(s => s.id === activeSessionId)?.name || "Restored System Module"}
+                </span>
+              </div>
+            )}
+
+            <div className="flex gap-1.5">
+              <input
+                type="text"
+                value={saveSessionName}
+                onChange={(e) => setSaveSessionName(e.target.value)}
+                placeholder="Name snapshot..."
+                className="flex-1 bg-black/45 hover:bg-black/60 border border-white/10 rounded px-2 py-1 text-[11px] text-white focus:outline-none focus:border-pink-500 font-mono"
+              />
+              <button
+                onClick={handleSaveCurrentSnapshot}
+                className="cursor-pointer bg-pink-600/80 hover:bg-pink-500 border border-pink-500/30 hover:border-pink-500 text-white font-bold px-2.5 py-1 rounded text-[10px] transition active:scale-95 text-center shrink-0 uppercase"
+                title="Capture & Save as persistent session snapshot"
+              >
+                [ Save ]
+              </button>
+            </div>
+
+            <button
+              onClick={() => {
+                logToSystem("Returning to Bios Configuration screen.");
+                setShowBios(true);
+              }}
+              className="cursor-pointer w-full bg-white/5 hover:bg-white/10 hover:text-white border border-white/10 text-slate-300 text-[10px] py-1.5 rounded flex items-center justify-center gap-1.5 font-bold transition uppercase"
+            >
+              <RefreshCw className="w-3 h-3 animate-spin-reverse text-indigo-300 font-bold" />
+              <span>Exit To BIOS Config</span>
+            </button>
           </div>
         </div>
       </div>
@@ -988,125 +1222,249 @@ function BiosConfigScreen({
   setTemperature,
   hallucinationLevel,
   setHallucinationLevel,
-  onCompleteBoot
+  savedSessions,
+  onDeleteSession,
+  onResumeSession,
+  onBootNewSession
 }: {
   temperature: number;
   setTemperature: React.Dispatch<React.SetStateAction<number>>;
   hallucinationLevel: number;
   setHallucinationLevel: React.Dispatch<React.SetStateAction<number>>;
-  onCompleteBoot: () => void;
+  savedSessions: any[];
+  onDeleteSession: (id: string) => void;
+  onResumeSession: (session: any, quickBoot: boolean) => void;
+  onBootNewSession: (sessionName: string, temp: number, level: number) => void;
 }) {
+  const [newSessionName, setNewSessionName] = useState('');
+  const [deleteConfId, setDeleteConfId] = useState<string | null>(null);
+
   return (
-    <div className="w-screen h-screen bg-[#020502] text-[#4af626] font-mono p-8 flex flex-col justify-between overflow-y-auto select-none relative">
+    <div className="w-screen h-screen bg-[#020502] text-[#4af626] font-mono p-4 md:p-8 flex flex-col justify-between overflow-y-auto select-none relative">
       {/* green vector CRT grid and lines */}
       <div className="absolute inset-0 bg-[#4af626]/[0.02] pointer-events-none" style={{ backgroundImage: 'linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06))', backgroundSize: '100% 4px, 6px 100%' }} />
 
-      <div className="max-w-3xl mx-auto w-full flex-1 flex flex-col justify-center py-6">
-        <div className="border border-[#4af626]/30 bg-[#050e05]/70 p-6 rounded-xl shadow-[0_0_20px_rgba(74,246,38,0.15)] backdrop-blur-sm">
-          <div className="flex justify-between items-center border-b border-[#4af626]/30 pb-3 mb-4">
-            <span className="font-bold text-sm tracking-widest uppercase">HALLUOS SYSTEM CONFIGURATION & BIOS v1.0.98</span>
-            <span className="text-[10px] bg-[#4af626]/10 px-1.5 py-0.5 rounded text-[#4af626]">COHERENT SECURED</span>
+      <div className="max-w-6xl mx-auto w-full flex-1 flex flex-col justify-center py-4 text-[#4af626]">
+        <div className="border border-[#4af626]/30 bg-[#050e05]/70 p-4 md:p-6 rounded-xl shadow-[0_0_25px_rgba(74,246,38,0.15)] backdrop-blur-sm">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-[#4af626]/30 pb-3 mb-4 gap-2">
+            <span className="font-bold text-sm tracking-widest uppercase">HALLUOS SYSTEM CONFIGURATION & BIOS v1.1.24</span>
+            <span className="text-[10px] bg-[#4af626]/10 px-1.5 py-0.5 rounded text-[#4af626] font-bold border border-[#4af626]/20">COHERENT SECURED</span>
           </div>
 
-          <div className="text-xs space-y-1 text-[#3beb1c] mb-6 font-mono leading-relaxed">
+          <div className="text-xs space-y-1 text-[#3beb1c] mb-5 font-mono leading-relaxed">
             <p>CORE CPU: COGNITIVE SUBCONSCIOUS MODEL (GEMINI MODEL ADAPTER)</p>
-            <p>BIOS REVISION: MATRIX_REBOOT_2026.06.13</p>
-            <p>SYSTEM RAM: 32 GIGABYTES OF LIQUID MEMORY SEGMENT</p>
-            <p>STATUS: UNLOCKED AND AWAITING DECOHERENCE CALIBRATION...</p>
+            <p>BIOS REVISION: SESSIONS_RECOVERY_2026.06.13</p>
+            <p>STATUS: ONLINE - MULTIPLE COMPATIBLE OPERATING SYSTEMS LOADED</p>
           </div>
 
-          <div className="bg-black/30 border border-[#4af626]/25 p-4 rounded-lg mb-6">
-            <h3 className="text-xs font-bold uppercase mb-4 text-white flex items-center gap-1">
-              <span>[+] Neural Excitement Calibration</span>
-            </h3>
+          {/* Two-Column Setup Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            
+            {/* Left Column: Sessions List */}
+            <div className="lg:col-span-7 bg-black/25 border border-[#4af626]/20 p-4 rounded-lg flex flex-col h-full min-h-[380px]">
+              <h3 className="text-xs font-bold uppercase mb-3 text-white flex items-center justify-between border-b border-[#4af626]/15 pb-1.5 select-none">
+                <span>[+] RESUME OR CHOOSE STORED ENVIRONMENT</span>
+                <span className="text-[9px] text-[#4af626]/60 font-medium">({savedSessions.length} CACHED)</span>
+              </h3>
 
-            <div className="space-y-4 text-xs">
-              {/* Temp parameter */}
-              <div>
-                <div className="flex justify-between mb-1.5 text-slate-300 select-none">
-                  <span>COGNITIVE CORE TEMPERATURE (Excitement Index):</span>
-                  <span className="text-white font-bold">{temperature.toFixed(2)} q/s</span>
+              {savedSessions.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-xs text-green-700 font-mono italic">
+                  <p className="mb-2">--- NO COMPATIBLE OPERATING INSTANCES DEVIATED ---</p>
+                  <p className="text-[10px] opacity-75 leading-relaxed">Configure the excitement parameters in the right hand dashboard panel to generate and initialize your first persistent OS sector.</p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <button 
-                    onClick={() => setTemperature(prev => Math.max(0.1, Number((prev - 0.1).toFixed(2))))}
-                    className="cursor-pointer bg-[#051505] hover:bg-[#0c250c] border border-[#4af626]/40 text-[#4af626] font-bold px-3 py-1 rounded text-xs transition active:scale-95"
-                  >
-                    [ - DECREMENT Temp ]
-                  </button>
-                  <input 
-                    type="range"
-                    min="0.1"
-                    max="2.0"
-                    step="0.05"
-                    value={temperature}
-                    onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                    className="flex-1 accent-[#4af626] h-1.5 rounded-lg appearance-none cursor-pointer bg-white/10"
-                  />
-                  <button 
-                    onClick={() => setTemperature(prev => Math.min(2.0, Number((prev + 0.1).toFixed(2))))}
-                    className="cursor-pointer bg-[#051505] hover:bg-[#0c250c] border border-[#4af626]/40 text-[#4af626] font-bold px-3 py-1 rounded text-xs transition active:scale-95"
-                  >
-                    [ + INCREMENT Temp ]
-                  </button>
-                </div>
-                <p className="text-[10px] text-green-500/80 mt-2 select-none leading-normal">
-                  Sets the LLM "temperature" parameter. Higher excitement ratios cause bizarre, dreamy output suggestions and eccentric layouts.
-                </p>
-              </div>
+              ) : (
+                <div className="space-y-3 overflow-y-auto max-h-[340px] pr-1">
+                  {savedSessions.map((session) => {
+                    const isDeleting = deleteConfId === session.id;
 
-              {/* Level parameters */}
-              <div className="pt-2 border-t border-[#4af626]/10">
-                <div className="flex justify-between mb-2 text-slate-300">
-                  <span>INITIAL COGNITIVE DISTORTION LEVEL:</span>
-                  <span className="text-white font-bold">Level {hallucinationLevel} ({getLevelLabel(hallucinationLevel)})</span>
+                    return (
+                      <div 
+                        key={session.id} 
+                        className="bg-[#051105] hover:bg-[#091a09] border border-[#4af626]/15 hover:border-[#4af626]/40 rounded-lg p-3 transition duration-150 flex flex-col justify-between gap-2.5"
+                      >
+                        <div className="flex justify-between items-start gap-2">
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-xs font-bold text-white truncate flex items-center gap-1.5">
+                              <span className="text-[#3beb1c] font-black">{">"}</span>
+                              {session.name}
+                            </h4>
+                            <p className="text-[10px] text-green-400/60 mt-0.5">
+                              SERIAL: <span className="font-mono text-[9px] text-green-500/80">{session.id}</span> • CREATED: {session.createdAt}
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end text-[9px] border border-[#4af626]/35 bg-[#4af626]/5 rounded px-2 py-0.5 shrink-0">
+                            <span className="font-bold">TEMP: {session.temperature.toFixed(2)} q/s</span>
+                            <span className="opacity-70">LEVEL: {session.hallucinationLevel}/5</span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 justify-between items-center text-[10px] pt-1.5 border-t border-[#4af626]/10">
+                          <div className="text-[9px] text-slate-400">
+                            APPS: <span className="text-white font-semibold">{(session.installedApps || []).length}</span> •
+                            WINDOWS: <span className="text-white font-semibold">{(session.windows || []).length} active</span>
+                          </div>
+
+                          <div className="flex gap-2">
+                            {isDeleting ? (
+                              <div className="flex gap-1.5">
+                                <span className="text-rose-400 font-bold shrink-0">PURGE FILE?</span>
+                                <button
+                                  onClick={() => onDeleteSession(session.id)}
+                                  className="cursor-pointer text-xs font-black text-rose-500 hover:text-white bg-rose-950/35 hover:bg-rose-700 px-1.5 rounded transition uppercase border border-rose-500/30"
+                                >
+                                  [ YES ]
+                                </button>
+                                <button
+                                  onClick={() => setDeleteConfId(null)}
+                                  className="cursor-pointer text-xs font-bold text-slate-400 hover:text-[#4af626] px-1.5 rounded transition uppercase"
+                                >
+                                  [ NO ]
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex gap-2 text-right">
+                                <button
+                                  onClick={() => onResumeSession(session, true)}
+                                  className="cursor-pointer text-[#4af626] font-bold border border-[#4af626]/30 hover:border-[#4af626] hover:bg-[#4af626]/10 px-2 py-0.5 rounded transition text-[9px] uppercase tracking-wide"
+                                  title="Skip loading sequence and boot instantaneously"
+                                >
+                                  [ Quick Boot ]
+                                </button>
+                                <button
+                                  onClick={() => onResumeSession(session, false)}
+                                  className="cursor-pointer bg-[#4af626] text-black font-black hover:bg-[#3beb1c] px-2 py-0.5 rounded transition text-[9px] uppercase"
+                                  title="Recoil state variables and stream startup loader"
+                                >
+                                  [ Cold Boot ]
+                                </button>
+                                <button
+                                  onClick={() => setDeleteConfId(session.id)}
+                                  className="cursor-pointer text-rose-400/70 hover:text-rose-400 hover:bg-rose-900/10 px-1.5 py-0.5 rounded transition text-[9px] uppercase"
+                                  title="Erase session permanently"
+                                >
+                                  [ PURGE ]
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {[1, 2, 3, 4, 5].map((lvl) => (
-                    <button
-                      key={lvl}
-                      onClick={() => setHallucinationLevel(lvl)}
-                      className={`cursor-pointer text-[10px] py-1.5 rounded text-center border font-bold transition active:scale-95 ${
-                        lvl === hallucinationLevel
-                          ? 'bg-[#4af626] text-black border-[#4af626]'
-                          : 'bg-[#051505] text-[#4af626] border-[#4af626]/30 hover:border-[#4af626]/70'
-                      }`}
-                    >
-                      Level {lvl}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[10px] text-green-300/80 mt-2 font-mono leading-relaxed select-none">
-                  {getLevelInstructions(hallucinationLevel)}
-                </p>
-              </div>
+              )}
             </div>
-          </div>
 
-          <div className="space-y-3">
-            <button
-              onClick={onCompleteBoot}
-              className="cursor-pointer w-full text-center bg-[#4af626] hover:bg-[#3beb1c] text-black font-black text-xs py-3 rounded-xl transition duration-150 shadow-[0_0_15px_rgba(74,246,38,0.3)] hover:scale-[1.01] uppercase"
-            >
-              DECOHERE MATRIX AND BOOT HALLUOS KERNEL
-            </button>
+            {/* Right Column: Setup Panel */}
+            <div className="lg:col-span-5 bg-black/30 border border-[#4af626]/25 p-4 rounded-lg flex flex-col justify-between">
+              
+              <div>
+                <h3 className="text-xs font-bold uppercase mb-4 text-white flex items-center gap-1.5 border-b border-[#4af626]/15 pb-1.5">
+                  <span>[+] CONFIGURE & LAUNCH NEW INSTANCE</span>
+                </h3>
 
-            <button
-              onClick={() => {
-                setTemperature(1.85);
-                setHallucinationLevel(5);
-                onCompleteBoot();
-              }}
-              className="cursor-pointer w-full text-center bg-red-950/20 hover:bg-red-900/30 border border-red-500/40 text-red-400 font-bold text-[10px] py-1.5 rounded-lg transition uppercase"
-            >
-              [ FORCE DISSOCIATE NEURAL CAP (SECRET HYPER-DREAM MODE) ]
-            </button>
+                <div className="space-y-4 text-xs font-mono">
+                  {/* Name Registration */}
+                  <div>
+                    <label className="block text-slate-300 mb-1.5 uppercase tracking-wide text-[10px] font-bold">
+                      NEW CORE REGISTERED NAME:
+                    </label>
+                    <input
+                      type="text"
+                      value={newSessionName}
+                      onChange={(e) => setNewSessionName(e.target.value)}
+                      placeholder="e.g. Dreamscape Alpha 1"
+                      className="w-full bg-[#051505] border border-[#4af626]/40 hover:border-[#4af626]/80 text-[#4af626] rounded px-3 py-2 text-xs focus:ring-1 focus:ring-[#4af626] focus:outline-none placeholder:text-green-900/70 font-bold"
+                    />
+                  </div>
+
+                  {/* Temp parameter */}
+                  <div className="pt-2 border-t border-[#4af626]/10">
+                    <div className="flex justify-between mb-1.5 text-slate-300 select-none">
+                      <span>CORE TEMPERATURE (Excitement index):</span>
+                      <span className="text-white font-bold">{temperature.toFixed(2)} q/s</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => setTemperature(prev => Math.max(0.1, Number((prev - 0.1).toFixed(2))))}
+                        className="cursor-pointer bg-[#051505] hover:bg-[#0c250c] border border-[#4af626]/40 text-[#4af626] font-bold px-2 py-1 rounded text-[10px] transition active:scale-95 shrink-0"
+                      >
+                        [-] Less
+                      </button>
+                      <input 
+                        type="range"
+                        min="0.1"
+                        max="2.0"
+                        step="0.05"
+                        value={temperature}
+                        onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                        className="flex-1 accent-[#4af626] h-1.5 rounded-lg appearance-none cursor-pointer bg-white/10"
+                      />
+                      <button 
+                        onClick={() => setTemperature(prev => Math.min(2.0, Number((prev + 0.1).toFixed(2))))}
+                        className="cursor-pointer bg-[#051505] hover:bg-[#0c250c] border border-[#4af626]/40 text-[#4af626] font-bold px-2 py-1 rounded text-[10px] transition active:scale-95 shrink-0"
+                      >
+                        [+] More
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Level parameters */}
+                  <div className="pt-2.5 border-t border-[#4af626]/10">
+                    <div className="flex justify-between mb-2 text-slate-300">
+                      <span>DISSOCIABILITY LEVEL:</span>
+                      <span className="text-white font-bold">Lvl {hallucinationLevel}</span>
+                    </div>
+                    <div className="grid grid-cols-5 gap-1 shadow-sm">
+                      {[1, 2, 3, 4, 5].map((lvl) => (
+                        <button
+                          key={lvl}
+                          onClick={() => setHallucinationLevel(lvl)}
+                          className={`cursor-pointer text-[10px] py-1.5 rounded text-center border font-bold transition active:scale-95 ${
+                            lvl === hallucinationLevel
+                              ? 'bg-[#4af626] text-black border-[#4af626]'
+                              : 'bg-[#051505] text-[#4af626] border-[#4af626]/30 hover:border-[#4af626]/70'
+                          }`}
+                        >
+                          Lvl {lvl}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-green-300/60 mt-2 font-mono leading-relaxed select-none">
+                      {getLevelInstructions(hallucinationLevel)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2 mt-6">
+                <button
+                  onClick={() => onBootNewSession(newSessionName, temperature, hallucinationLevel)}
+                  className="cursor-pointer w-full text-center bg-[#4af626] hover:bg-[#3beb1c] text-black font-black text-xs py-3 rounded-lg transition duration-150 shadow-[0_0_15px_rgba(74,246,38,0.25)] hover:scale-[1.01] uppercase tracking-wide"
+                >
+                  [ GENERATE PERSISTENT OS SECTOR ]
+                </button>
+
+                <button
+                  onClick={() => {
+                    setTemperature(1.85);
+                    setHallucinationLevel(5);
+                    onBootNewSession(newSessionName || "Secret Hyper-Dream OS", 1.85, 5);
+                  }}
+                  className="cursor-pointer w-full text-center bg-red-950/20 hover:bg-red-900/30 border border-red-500/40 text-red-100 font-bold text-[9px] py-1.5 rounded transition uppercase tracking-wide"
+                >
+                  [ FORCE HYPER-DREAMS CONVOLUTION ]
+                </button>
+              </div>
+
+            </div>
+
           </div>
         </div>
       </div>
 
-      <div className="text-center text-[10px] text-[#4af626]/40 select-none font-mono">
-        PRESS [ANY KEY TO DREAM] / BUILT BY THE SUBCONSCIOUS MODEL DIVISION
+      <div className="text-center text-[10px] text-[#4af626]/45 select-none font-mono">
+        PRESS [ANY KEY TO DREAM] / BUILT BY THE SUBCONSCIOUS MODEL DIVISION • STABLE MULTI-OS LOADER
       </div>
     </div>
   );
